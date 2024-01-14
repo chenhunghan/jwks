@@ -178,8 +178,53 @@ pub enum JwkError {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
-    #[test]
-    fn it_works() {}
+    #[tokio::test]
+    async fn can_fetch_and_parse_jwks() {
+        let mut server = mockito::Server::new();
+
+        let url = server.url();
+        let jwks_path = "/oauth2/v3/certs";
+
+        // from https://www.googleapis.com/oauth2/v3/certs
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+              "kty": "RSA",
+              "alg": "RS256",
+              "e": "AQAB",
+              "kid": "91413cf4fa0cb92a3c3f5a054509132c47660937"
+            },
+            {
+              "n": "tgkwz0K80MycaI2Dz_jHkErJ_IHUPTlx4LR_6wltAHQW_ZwhMzINNH8vbWo8P5F2YLDiIbuslF9y7Q3izsPX3XWQyt6LI8ZT4gmGXQBumYMKx2VtbmTYIysKY8AY7x5UCDO-oaAcBuKQvWc5E31kXm6d6vfaEZjrMc_KT3DsFdN0LcAkB-Q9oYcVl7YEgAN849ROKUs6onf7eukj1PHwDzIBgA9AExJaKen0wITvxQv3H_BRXB7m6hFkLbK5Jo18gl3UxJ7Em29peEwi8Psn7MuI7CwhFNchKhjZM9eaMX27tpDPqR15-I6CA5Zf94rabUGWYph5cFXKWPPr8dskQQ",
+              "alg": "RS256",
+              "use": "sig",
+              "kid": "1f40f0a8ef3d880978dc82f25c3ec317c6a5b781",
+              "e": "AQAB",
+              "kty": "RSA"
+            }
+          ]
+        });
+
+        let _ = server
+            .mock("GET", jwks_path)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(jwks.to_string())
+            .create_async()
+            .await;
+
+        let jwks_url = format!("{}{}", url, jwks_path);
+        let jwks = Jwks::from_jwks_url(&jwks_url).await.unwrap();
+        assert_eq!(jwks.keys.len(), 2);
+        
+        // get keys by key id (kid)
+        _ = &jwks.keys.get("91413cf4fa0cb92a3c3f5a054509132c47660937").expect("key one should be found");
+        _ = &jwks.keys.get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781").expect("key two should be found");
+    }
 }
