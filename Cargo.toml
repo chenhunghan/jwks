@@ -1,6 +1,6 @@
 [package]
 name = "jwks"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -12,8 +12,7 @@ reqwest = { version = "0.11.23", features = ["json"] }
 serde = { version = "1.0.195", features = ["derive"] }
 thiserror = "1.0.56"
 tokio = { version = "1.35.1", features = ["full"] }
-tracing = "0.1.40"
 
 [dev-dependencies]
-mockito = "1.2.0"
+httpmock = "0.7.0-rc.1"
 serde_json = "1.0.111"
