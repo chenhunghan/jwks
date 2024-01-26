@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/chenhunghan/jwks/compare/v0.1.0...v0.1.1) (2024-01-26)
+
+
+### Bug Fixes
+
+* add missing metadata in Cargo.toml ([0b51983](https://github.com/chenhunghan/jwks/commit/0b51983e04bfa3e1a9338169c63a59fad8f28b50))
+
 ## 0.1.0 (2024-01-26)
 
 
