@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/chenhunghan/jwks/compare/v0.1.1...v0.1.2) (2024-01-26)
+
+
+### Bug Fixes
+
+* expected at most 5 keywords per crate ([6cb20ea](https://github.com/chenhunghan/jwks/commit/6cb20ea9e332d9cdaea31ce6f67f86fdec80ab7c))
+
 ## [0.1.1](https://github.com/chenhunghan/jwks/compare/v0.1.0...v0.1.1) (2024-01-26)
 
 
