@@ -1,6 +1,12 @@
 # jwks
 Fetch and parse JSON Web Key Set (JWKS)
 
+```
+cargo add jwks
+```
+
+<https://crates.io/crates/jwks>
+
 ## Usage
 
 From a jwks url.
