@@ -17,7 +17,7 @@ use thiserror::Error;
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct Jwks {
-    keys: HashMap<String, Jwk>,
+    pub keys: HashMap<String, Jwk>,
 }
 
 #[derive(Deserialize)]
@@ -137,8 +137,8 @@ impl Jwks {
 
 #[derive(Clone)]
 #[allow(dead_code)]
-struct Jwk {
-    decoding_key: DecodingKey,
+pub struct Jwk {
+    pub decoding_key: DecodingKey,
 }
 
 /// An error with the overall set of JSON Web Keys.
