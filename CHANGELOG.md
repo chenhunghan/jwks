@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/chenhunghan/jwks/compare/v0.1.2...v0.1.3) (2024-02-12)
+
+
+### Bug Fixes
+
+* make Jwks.keys and Jwk public ([c716c4f](https://github.com/chenhunghan/jwks/commit/c716c4f9a4aff19fcc039127662d1c8beeeaef7d))
+
 ## [0.1.2](https://github.com/chenhunghan/jwks/compare/v0.1.1...v0.1.2) (2024-01-26)
 
 
