@@ -15,13 +15,13 @@ keywords = ["jwt", "jsonwebtoken", "jwks"]
 [dependencies]
 base64 = "0.21.7"
 jsonwebtoken = "9.2.0"
-reqwest = { version = "0.11.23", features = ["json"] }
+reqwest = { version = "0.11.23", features = ["json", "rustls"] }
 serde = { version = "1.0.195", features = ["derive"] }
 thiserror = "1.0.56"
 tokio = { version = "1.35.1", features = ["full"] }
 
 [features]
-rustls = ["reqwest/rustls-tls"]
+rustls = ["reqwest/rustls"]
 native-tls-vendored = ["reqwest/native-tls-vendored"]
 
 [dev-dependencies]
