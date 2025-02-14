@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/chenhunghan/jwks/compare/v0.2.0...v0.3.0) (2025-02-14)
+
+
+### Features
+
+* expose .alg parsed from key ([#13](https://github.com/chenhunghan/jwks/issues/13)) ([7bf41c8](https://github.com/chenhunghan/jwks/commit/7bf41c828793288152235ab9030a5d0cc3b9b2e1))
+
 ## [0.2.0](https://github.com/chenhunghan/jwks/compare/v0.1.3...v0.2.0) (2025-01-05)
 
 
