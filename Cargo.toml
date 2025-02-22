@@ -13,8 +13,8 @@ keywords = ["jwt", "jsonwebtoken", "jwks"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.21.7"
-jsonwebtoken = "9.2.0"
+base64 = "0.22.1"
+jsonwebtoken = "9.3.1"
 reqwest = { version = "0.12.12", features = ["json"], default-features = false }
 serde = { version = "1.0.195", features = ["derive"] }
 thiserror = "1.0.56"
