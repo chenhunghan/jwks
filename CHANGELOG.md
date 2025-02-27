@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/chenhunghan/jwks/compare/v0.3.0...v0.4.0) (2025-02-27)
+
+
+### Features
+
+* bump base64 to 0.22.1 and jsonwebtoken to 9.3.1 ([#16](https://github.com/chenhunghan/jwks/issues/16)) ([4a491f8](https://github.com/chenhunghan/jwks/commit/4a491f8a3f5407c72a0153e9330e38cf9c229c77))
+
 ## [0.3.0](https://github.com/chenhunghan/jwks/compare/v0.2.0...v0.3.0) (2025-02-14)
 
 
