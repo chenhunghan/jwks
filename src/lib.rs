@@ -46,7 +46,7 @@ impl Jwks {
             .await?;
         let jwks_uri = oidc_config.jwks_uri;
 
-        Self::from_jwks_url_with_client(&reqwest::Client::default(), &jwks_uri).await
+        Self::from_jwks_url_with_client(client, &jwks_uri).await
     }
 
     /// # Arguments
