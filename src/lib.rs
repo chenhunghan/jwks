@@ -213,8 +213,20 @@ mod tests {
         let jwks_url = server.url(jwks_path);
         let jwks = Jwks::from_jwks_url(&jwks_url).await.unwrap();
         assert_eq!(jwks.keys.len(), 2);
-        assert_eq!(jwks.keys.get("91413cf4fa0cb92a3c3f5a054509132c47660937").unwrap().alg, KeyAlgorithm::RS256);
-        assert_eq!(jwks.keys.get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781").unwrap().alg, KeyAlgorithm::RS256);
+        assert_eq!(
+            jwks.keys
+                .get("91413cf4fa0cb92a3c3f5a054509132c47660937")
+                .unwrap()
+                .alg,
+            KeyAlgorithm::RS256
+        );
+        assert_eq!(
+            jwks.keys
+                .get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781")
+                .unwrap()
+                .alg,
+            KeyAlgorithm::RS256
+        );
 
         // get keys by key id (kid)
         _ = &jwks
@@ -334,8 +346,20 @@ mod tests {
         let oidc_config_url = oidc_server.url(oidc_config_path);
         let jwks = Jwks::from_oidc_url(&oidc_config_url).await.unwrap();
         assert_eq!(jwks.keys.len(), 2);
-        assert_eq!(jwks.keys.get("91413cf4fa0cb92a3c3f5a054509132c47660937").unwrap().alg, KeyAlgorithm::RS256);
-        assert_eq!(jwks.keys.get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781").unwrap().alg, KeyAlgorithm::RS256);
+        assert_eq!(
+            jwks.keys
+                .get("91413cf4fa0cb92a3c3f5a054509132c47660937")
+                .unwrap()
+                .alg,
+            KeyAlgorithm::RS256
+        );
+        assert_eq!(
+            jwks.keys
+                .get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781")
+                .unwrap()
+                .alg,
+            KeyAlgorithm::RS256
+        );
 
         // get keys by key id (kid)
         _ = &jwks
