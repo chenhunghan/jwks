@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/chenhunghan/jwks/compare/v0.4.0...v0.5.0) (2025-09-21)
+
+
+### Features
+
+* when providing a custom client, pass it all the way through ([#19](https://github.com/chenhunghan/jwks/issues/19)) ([9e587ee](https://github.com/chenhunghan/jwks/commit/9e587eef6407971f7367d76bd66f65896e7d7297))
+
 ## [0.4.0](https://github.com/chenhunghan/jwks/compare/v0.3.0...v0.4.0) (2025-02-27)
 
 
