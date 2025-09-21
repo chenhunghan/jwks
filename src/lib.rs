@@ -485,7 +485,10 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url("/no-kid")).await;
-        assert!(matches!(result, Err(JwksError::KeyError(JwkError::MissingKeyId))));
+        assert!(matches!(
+            result,
+            Err(JwksError::KeyError(JwkError::MissingKeyId))
+        ));
     }
 
     #[tokio::test]
@@ -509,7 +512,9 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url("/no-alg")).await;
-        assert!(matches!(result, Err(JwksError::KeyError(JwkError::MissingAlgorithm { key_id })) if key_id == "no-alg-key"));
+        assert!(
+            matches!(result, Err(JwksError::KeyError(JwkError::MissingAlgorithm { key_id })) if key_id == "no-alg-key")
+        );
     }
 
     #[tokio::test]
@@ -561,7 +566,8 @@ mod tests {
 
     #[tokio::test]
     async fn handles_oidc_url_without_scheme() {
-        let result = Jwks::from_oidc_url("accounts.google.com/.well-known/openid-configuration").await;
+        let result =
+            Jwks::from_oidc_url("accounts.google.com/.well-known/openid-configuration").await;
         assert!(matches!(result, Err(JwksError::InvalidUrlScheme(_))));
     }
 
@@ -656,7 +662,10 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
-        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError { .. }))));
+        assert!(matches!(
+            result,
+            Err(JwksError::KeyError(JwkError::DecodingError { .. }))
+        ));
     }
 
     #[tokio::test]
@@ -744,5 +753,232 @@ mod tests {
         // Test symmetric key
         let symmetric_key = jwks.keys.get("symmetric-key").unwrap();
         assert_eq!(symmetric_key.alg, KeyAlgorithm::HS256);
+    }
+
+    #[tokio::test]
+    async fn e2e_jwt_sign_and_verify_with_rsa_key() {
+        use jsonwebtoken::{decode, encode, EncodingKey, Header, Validation};
+        use rsa::pkcs1::EncodeRsaPrivateKey;
+        use rsa::traits::PublicKeyParts;
+        use serde_json::json;
+
+        let server = MockServer::start();
+        let jwks_path = "/jwks";
+
+        // Generate RSA key pair for the test
+        let mut rng = rand::thread_rng();
+        let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = private_key.to_public_key();
+
+        // Extract components for JWKS
+        let n = URL_SAFE_NO_PAD.encode(&public_key.n().to_bytes_be());
+        let e = URL_SAFE_NO_PAD.encode(&public_key.e().to_bytes_be());
+
+        // Create JWKS with the public key
+        let jwks_data = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "n": n,
+              "kty": "RSA",
+              "alg": "RS256",
+              "e": e,
+              "kid": "test-rsa-key"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks_data.to_string());
+        });
+
+        // Fetch JWKS using the library
+        let jwks_url = server.url(jwks_path);
+        let jwks = Jwks::from_jwks_url(&jwks_url).await.unwrap();
+
+        // Create JWT claims (with future expiration)
+        let now = jsonwebtoken::get_current_timestamp();
+        let claims = json!({
+            "sub": "1234567890",
+            "name": "John Doe",
+            "iat": now,
+            "exp": now + 3600
+        });
+
+        // Sign JWT with private key
+        let header = Header::new(jsonwebtoken::Algorithm::RS256);
+        let encoding_key =
+            EncodingKey::from_rsa_der(&private_key.to_pkcs1_der().unwrap().to_bytes());
+        let token = encode(&header, &claims, &encoding_key).unwrap();
+
+        // Verify JWT using the fetched JWKS
+        let test_key = jwks.keys.get("test-rsa-key").unwrap();
+        let validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+        let token_data =
+            decode::<serde_json::Value>(&token, &test_key.decoding_key, &validation).unwrap();
+
+        // Verify the claims
+        assert_eq!(token_data.claims, claims);
+        assert_eq!(token_data.header.alg, jsonwebtoken::Algorithm::RS256);
+    }
+
+    // Note: EC key test is omitted for brevity, but would follow similar pattern
+    // with proper key generation and conversion between public/private key formats
+
+    #[tokio::test]
+    async fn e2e_jwt_sign_and_verify_with_symmetric_key() {
+        use jsonwebtoken::{decode, encode, EncodingKey, Header, Validation};
+        use serde_json::json;
+
+        let server = MockServer::start();
+        let jwks_path = "/jwks";
+
+        // Generate symmetric key for the test
+        let symmetric_key = b"my-super-secret-symmetric-key";
+        let encoded_key = URL_SAFE_NO_PAD.encode(symmetric_key);
+
+        // Create JWKS with the symmetric key
+        let jwks_data = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "kty": "oct",
+              "alg": "HS256",
+              "k": encoded_key,
+              "kid": "test-symmetric-key"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks_data.to_string());
+        });
+
+        // Fetch JWKS using the library
+        let jwks_url = server.url(jwks_path);
+        let jwks = Jwks::from_jwks_url(&jwks_url).await.unwrap();
+
+        // Create JWT claims (with future expiration)
+        let now = jsonwebtoken::get_current_timestamp();
+        let claims = json!({
+            "sub": "1234567890",
+            "name": "Alice Smith",
+            "iat": now,
+            "exp": now + 3600
+        });
+
+        // Sign JWT with symmetric key
+        let header = Header::new(jsonwebtoken::Algorithm::HS256);
+        let encoding_key = EncodingKey::from_secret(symmetric_key);
+        let token = encode(&header, &claims, &encoding_key).unwrap();
+
+        // Verify JWT using the fetched JWKS
+        let test_key = jwks.keys.get("test-symmetric-key").unwrap();
+        let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+        let token_data =
+            decode::<serde_json::Value>(&token, &test_key.decoding_key, &validation).unwrap();
+
+        // Verify the claims
+        assert_eq!(token_data.claims, claims);
+        assert_eq!(token_data.header.alg, jsonwebtoken::Algorithm::HS256);
+    }
+
+    #[tokio::test]
+    async fn e2e_jwt_verify_with_oidc_discovery() {
+        use jsonwebtoken::{decode, encode, EncodingKey, Header, Validation};
+        use rsa::pkcs1::EncodeRsaPrivateKey;
+        use rsa::traits::PublicKeyParts;
+
+        let oidc_server = MockServer::start();
+
+        let oidc_config_path = "/.well-known/openid-configuration";
+        let jwks_path = "/oauth2/v3/certs";
+        let jwks_url = oidc_server.url(jwks_path);
+
+        // Generate RSA key pair for the test
+        let mut rng = rand::thread_rng();
+        let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let public_key = private_key.to_public_key();
+
+        // Extract components for JWKS
+        let n = URL_SAFE_NO_PAD.encode(&public_key.n().to_bytes_be());
+        let e = URL_SAFE_NO_PAD.encode(&public_key.e().to_bytes_be());
+
+        // Create OIDC configuration
+        let oidc_config = json!({
+         "issuer": "https://auth.example.com",
+         "authorization_endpoint": "https://auth.example.com/oauth2/v2/auth",
+         "token_endpoint": "https://auth.example.com/oauth2/v2/token",
+         "jwks_uri": jwks_url,
+         "response_types_supported": ["code"],
+         "subject_types_supported": ["public"],
+         "id_token_signing_alg_values_supported": ["RS256"],
+         "scopes_supported": ["openid", "email", "profile"]
+        });
+
+        let _ = oidc_server.mock(|when, then| {
+            when.method(GET).path(oidc_config_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(oidc_config.to_string());
+        });
+
+        // Create JWKS with the public key
+        let jwks_data = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "n": n,
+              "kty": "RSA",
+              "alg": "RS256",
+              "e": e,
+              "kid": "test-oidc-key"
+            }
+          ]
+        });
+
+        let _ = oidc_server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks_data.to_string());
+        });
+
+        // Fetch JWKS using OIDC discovery
+        let oidc_config_url = oidc_server.url(oidc_config_path);
+        let jwks = Jwks::from_oidc_url(&oidc_config_url).await.unwrap();
+
+        // Create JWT claims (with future expiration)
+        let now = jsonwebtoken::get_current_timestamp();
+        let claims = json!({
+            "sub": "1234567890",
+            "name": "Bob Johnson",
+            "iat": now,
+            "exp": now + 3600,
+            "iss": "https://auth.example.com"
+        });
+
+        // Sign JWT with private key
+        let header = Header::new(jsonwebtoken::Algorithm::RS256);
+        let encoding_key =
+            EncodingKey::from_rsa_der(&private_key.to_pkcs1_der().unwrap().to_bytes());
+        let token = encode(&header, &claims, &encoding_key).unwrap();
+
+        // Verify JWT using the fetched JWKS
+        let test_key = jwks.keys.get("test-oidc-key").unwrap();
+        let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+        validation.set_issuer(&["https://auth.example.com"]);
+        let token_data =
+            decode::<serde_json::Value>(&token, &test_key.decoding_key, &validation).unwrap();
+
+        // Verify the claims
+        assert_eq!(token_data.claims, claims);
+        assert_eq!(token_data.header.alg, jsonwebtoken::Algorithm::RS256);
     }
 }

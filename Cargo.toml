@@ -21,5 +21,8 @@ thiserror = "1.0.56"
 tokio = { version = "1.35.1", features = ["full"] }
 
 [dev-dependencies]
-httpmock = "0.7.0-rc.1"
-serde_json = "1.0.111"
+httpmock = "0.7"
+serde_json = "1"
+rsa = "0.9"
+p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
+rand = "0.8"
