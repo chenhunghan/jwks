@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/chenhunghan/jwks/compare/v0.5.0...v0.5.1) (2025-09-21)
+
+
+### Bug Fixes
+
+* validate url schema fixes https://github.com/chenhunghan/jwks/issues/18 ([18498e1](https://github.com/chenhunghan/jwks/commit/18498e1b26e86b7ed9ef9c1fae730bd166b82ac5))
+
 ## [0.5.0](https://github.com/chenhunghan/jwks/compare/v0.4.0...v0.5.0) (2025-09-21)
 
 
