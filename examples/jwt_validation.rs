@@ -123,21 +123,40 @@ async fn main() {
         }
         Err(e) => {
             println!("❌ JWT validation failed: {}", e);
-            println!("Common issues:");
-            println!("  - JWT has expired");
-            println!("  - JWT signature is invalid");
-            println!("  - JWT issuer/audience doesn't match validation criteria");
+
+            // Provide specific guidance for this demo
+            if e.to_string().contains("InvalidSignature") {
+                println!("\n📝 Demo Note: This is expected behavior!");
+                println!("   We're using a mock JWT with Google's real Key ID (kid),");
+                println!("   but with a dummy signature since we don't have Google's private key.");
+                println!("\n   ✅ The example successfully demonstrated:");
+                println!("      • JWT header decoding");
+                println!("      • Key ID extraction and matching");
+                println!("      • JWKS fetching from Google");
+                println!("      • Key lookup and algorithm verification");
+                println!("\n   In a real application, you would use JWTs signed by your");
+                println!("   OAuth2 provider with their actual private key.");
+            } else {
+                println!("Common issues:");
+                println!("  - JWT has expired");
+                println!("  - JWT signature is invalid");
+                println!("  - JWT issuer/audience doesn't match validation criteria");
+            }
         }
     }
 }
 
 /// Helper function to get a sample JWT for testing
-/// Replace this with a real JWT from your OAuth2 provider
+///
+/// This returns a mock JWT that:
+/// - Uses Google's actual Key ID (kid) from their JWKS endpoint
+/// - Has the correct structure and typical Google OAuth2 claims
+/// - Has an invalid signature (since we don't have Google's private key)
+///
+/// This is perfect for demonstrating the validation flow!
 fn get_sample_jwt() -> String {
-    // This is a placeholder. In a real application, you would:
-    // 1. Get a JWT from an OAuth2 provider (Google, Auth0, etc.)
-    // 2. Pass it via environment variable, config file, or command line argument
-    // 3. Or get it from an HTTP request header
-
-    "".to_string() // Return empty string for demo purposes
+    // Mock JWT using Google's actual Key ID (kid: 07f078f2647e8cd019c40da9569e4f5247991094)
+    // This JWT will be properly validated for structure and key matching,
+    // but will fail signature validation (which is expected for a demo)
+    "eyJhbGciOiJSUzI1NiIsImtpZCI6IjA3ZjA3OGYyNjQ3ZThjZDAxOWM0MGRhOTU2OWU0ZjUyNDc5OTEwOTQiLCJ0eXAiOiJKV1QifQ.eyJhdF9oYXNoIjoiZXhhbXBsZV9oYXNoIiwiYXVkIjoieW91ci1jbGllbnQtaWQuYXBwcy5nb29nbGV1c2VyY29udGVudC5jb20iLCJhenAiOiJ5b3VyLWNsaWVudC1pZC5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJleHAiOjE3NTg0NTY0ODQsImZhbWlseV9uYW1lIjoiVXNlciIsImdpdmVuX25hbWUiOiJUZXN0IiwiaWF0IjoxNzU4NDUyODg0LCJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJqdGkiOiJleGFtcGxlLWp0aS0xMjM0NTYiLCJsb2NhbGUiOiJlbiIsIm5hbWUiOiJUZXN0IFVzZXIiLCJwaWN0dXJlIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9waG90by5qcGciLCJzdWIiOiIxMjM0NTY3ODkifQ.bW9ja19zaWduYXR1cmVfZGF0YQ".to_string()
 }

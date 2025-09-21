@@ -26,3 +26,4 @@ serde_json = "1"
 rsa = "0.9"
 p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
 rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
