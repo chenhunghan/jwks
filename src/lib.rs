@@ -537,4 +537,185 @@ mod tests {
         let result = Jwks::from_oidc_url(&server.url("/invalid-oidc")).await;
         assert!(matches!(result, Err(JwksError::FetchError(_))));
     }
+
+    #[tokio::test]
+    async fn can_parse_ec_keys_with_ec_p256_algorithms() {
+        let server = MockServer::start();
+        let jwks_path = "/ec-keys";
+
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "kty": "EC",
+              "alg": "ES256",
+              "crv": "P-256",
+              "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+              "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+              "kid": "ec-p256-key"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url(jwks_path)).await.unwrap();
+        assert_eq!(jwks.keys.len(), 1);
+
+        // Test P-256 key
+        let p256_key = jwks.keys.get("ec-p256-key").unwrap();
+        assert_eq!(p256_key.alg, KeyAlgorithm::ES256);
+    }
+
+    #[tokio::test]
+    async fn handles_ec_key_missing_coordinates() {
+        let server = MockServer::start();
+        let jwks_path = "/ec-missing-coords";
+
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "kty": "EC",
+              "alg": "ES256",
+              "crv": "P-256",
+              "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+              // Missing y coordinate
+              "kid": "ec-missing-y"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_ec_key_invalid_coordinates() {
+        let server = MockServer::start();
+        let jwks_path = "/ec-invalid-coords";
+
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "kty": "EC",
+              "alg": "ES256",
+              "crv": "P-256",
+              "x": "invalid_base64!",
+              "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+              "kid": "ec-invalid-x"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
+        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError { .. }))));
+    }
+
+    #[tokio::test]
+    async fn handles_ec_key_missing_curve() {
+        let server = MockServer::start();
+        let jwks_path = "/ec-missing-curve";
+
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "kty": "EC",
+              "alg": "ES256",
+              // Missing crv parameter
+              "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+              "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+              "kid": "ec-missing-curve"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn can_parse_mixed_key_types() {
+        let server = MockServer::start();
+        let jwks_path = "/mixed-keys";
+
+        let jwks = json!({
+          "keys": [
+            {
+              "use": "sig",
+              "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+              "kty": "RSA",
+              "alg": "RS256",
+              "e": "AQAB",
+              "kid": "rsa-key"
+            },
+            {
+              "use": "sig",
+              "kty": "EC",
+              "alg": "ES256",
+              "crv": "P-256",
+              "x": "MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4",
+              "y": "4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM",
+              "kid": "ec-key"
+            },
+            {
+              "use": "sig",
+              "kty": "oct",
+              "alg": "HS256",
+              "k": "GawgguFyGrWKav7AX4VKUg",
+              "kid": "symmetric-key"
+            }
+          ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path(jwks_path);
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url(jwks_path)).await.unwrap();
+        assert_eq!(jwks.keys.len(), 3);
+
+        // Test RSA key
+        let rsa_key = jwks.keys.get("rsa-key").unwrap();
+        assert_eq!(rsa_key.alg, KeyAlgorithm::RS256);
+
+        // Test EC key
+        let ec_key = jwks.keys.get("ec-key").unwrap();
+        assert_eq!(ec_key.alg, KeyAlgorithm::ES256);
+
+        // Test symmetric key
+        let symmetric_key = jwks.keys.get("symmetric-key").unwrap();
+        assert_eq!(symmetric_key.alg, KeyAlgorithm::HS256);
+    }
 }
