@@ -371,4 +371,170 @@ mod tests {
             .get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781")
             .expect("key two should be found");
     }
+
+    #[tokio::test]
+    async fn handles_network_errors() {
+        let jwks_url = "http://localhost:9999/nonexistent";
+        let result = Jwks::from_jwks_url(jwks_url).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_network_errors_with_custom_client() {
+        let server = MockServer::start();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(1))
+            .build()
+            .unwrap();
+
+        let result = Jwks::from_jwks_url_with_client(&client, &server.url("/slow")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_invalid_json_response() {
+        let server = MockServer::start();
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/invalid-json");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body("{ invalid json }");
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/invalid-json")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_non_json_response() {
+        let server = MockServer::start();
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/text");
+            then.status(200)
+                .header("content-type", "text/plain")
+                .body("not json");
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/text")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_http_error_response() {
+        let server = MockServer::start();
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/error");
+            then.status(404);
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/error")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_missing_keys_array() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "not_keys": []
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/no-keys");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/no-keys")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_key_without_kid() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [{
+                "kty": "RSA",
+                "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+                "e": "AQAB",
+                "alg": "RS256"
+                // Missing kid
+            }]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/no-kid");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/no-kid")).await;
+        assert!(matches!(result, Err(JwksError::KeyError(JwkError::MissingKeyId))));
+    }
+
+    #[tokio::test]
+    async fn handles_key_without_algorithm() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [{
+                "kty": "RSA",
+                "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+                "e": "AQAB",
+                "kid": "no-alg-key"
+                // Missing alg
+            }]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/no-alg");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/no-alg")).await;
+        assert!(matches!(result, Err(JwksError::KeyError(JwkError::MissingAlgorithm { key_id })) if key_id == "no-alg-key"));
+    }
+
+    #[tokio::test]
+    async fn handles_empty_jwks() {
+        let server = MockServer::start();
+        let jwks = json!({"keys": []});
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/empty");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url("/empty")).await.unwrap();
+        assert_eq!(jwks.keys.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn handles_oidc_network_error() {
+        let server = MockServer::start();
+        let result = Jwks::from_oidc_url(&server.url("/nonexistent")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_invalid_oidc_config() {
+        let server = MockServer::start();
+        let invalid_config = json!({
+            "invalid_field": "invalid_value"
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/invalid-oidc");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(invalid_config.to_string());
+        });
+
+        let result = Jwks::from_oidc_url(&server.url("/invalid-oidc")).await;
+        assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
 }
