@@ -65,91 +65,8 @@ impl Jwks {
 
         let mut keys = HashMap::new();
         for jwk in jwks.keys {
-            let kid = jwk.common.key_id.ok_or(JwkError::MissingKeyId)?;
-
-            match &jwk.algorithm {
-                jwk::AlgorithmParameters::RSA(params) => {
-                    let decoding_key = DecodingKey::from_rsa_components(&params.n, &params.e)
-                        .map_err(|err| JwkError::DecodingError {
-                            key_id: kid.clone(),
-                            error: err,
-                        })?;
-
-                    let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
-                        key_id: kid.clone(),
-                    })?;
-
-                    keys.insert(
-                        kid,
-                        Jwk {
-                            alg: alg,
-                            decoding_key: decoding_key,
-                        },
-                    );
-                }
-                jwk::AlgorithmParameters::EllipticCurve(params) => {
-                    let decoding_key = DecodingKey::from_ec_components(&params.x, &params.y)
-                        .map_err(|err| JwkError::DecodingError {
-                            key_id: kid.clone(),
-                            error: err,
-                        })?;
-
-                    let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
-                        key_id: kid.clone(),
-                    })?;
-
-                    keys.insert(
-                        kid,
-                        Jwk {
-                            alg: alg,
-                            decoding_key: decoding_key,
-                        },
-                    );
-                }
-                jwk::AlgorithmParameters::OctetKeyPair(params) => {
-                    let decoding_key =
-                        DecodingKey::from_ed_components(&params.x).map_err(|err| {
-                            JwkError::DecodingError {
-                                key_id: kid.clone(),
-                                error: err,
-                            }
-                        })?;
-                    
-                    let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
-                        key_id: kid.clone(),
-                    })?;
-
-                    keys.insert(
-                        kid,
-                        Jwk {
-                            alg: alg,
-                            decoding_key: decoding_key,
-                        },
-                    );
-                }
-                jwk::AlgorithmParameters::OctetKey(params) => {
-                    // same as https://github.com/Keats/jsonwebtoken/blob/master/src/serialization.rs#L11
-                    let base64_decoded = URL_SAFE_NO_PAD.decode(&params.value).map_err(|err| {
-                        JwkError::DecodingError {
-                            key_id: kid.clone(),
-                            error: err.into(),
-                        }
-                    })?;
-
-                    let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
-                        key_id: kid.clone(),
-                    })?;
-
-                    let decoding_key = DecodingKey::from_secret(&base64_decoded);
-                    keys.insert(
-                        kid,
-                        Jwk {
-                            alg: alg,
-                            decoding_key: decoding_key,
-                        },
-                    );
-                }
-            }
+            let JwkEntry { kid, jwk } = jwk.try_into()?;
+            keys.insert(kid, jwk);
         }
 
         Ok(Self { keys })
@@ -161,6 +78,61 @@ impl Jwks {
 pub struct Jwk {
     pub alg: KeyAlgorithm,
     pub decoding_key: DecodingKey,
+}
+
+#[allow(dead_code)]
+pub struct JwkEntry {
+    pub kid: String,
+    pub jwk: Jwk,
+}
+
+impl JwkEntry {
+    pub fn from_jsonwebkey_ref(jwk: &jwk::Jwk) -> Result<Self, JwkError> {
+        let kid = jwk.common.key_id.clone().ok_or(JwkError::MissingKeyId)?;
+
+        let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
+            key_id: kid.clone(),
+        })?;
+
+        let decoding_key = match &jwk.algorithm {
+            jwk::AlgorithmParameters::RSA(params) => {
+                DecodingKey::from_rsa_components(&params.n, &params.e)
+            }
+            jwk::AlgorithmParameters::EllipticCurve(params) => {
+                DecodingKey::from_ec_components(&params.x, &params.y)
+            }
+            jwk::AlgorithmParameters::OctetKeyPair(params) => {
+                DecodingKey::from_ed_components(&params.x)
+            }
+            jwk::AlgorithmParameters::OctetKey(params) => {
+                // same as https://github.com/Keats/jsonwebtoken/blob/master/src/serialization.rs#L11
+                let base64_decoded = URL_SAFE_NO_PAD.decode(&params.value).map_err(|err| {
+                    JwkError::DecodingError {
+                        key_id: kid.clone(),
+                        error: err.into(),
+                    }
+                })?;
+
+                Ok(DecodingKey::from_secret(&base64_decoded))
+            }
+        }
+        .map_err(|err| JwkError::DecodingError {
+            key_id: kid.clone(),
+            error: err,
+        })?;
+
+        Ok(Self {
+            kid,
+            jwk: Jwk { alg, decoding_key },
+        })
+    }
+}
+
+impl TryFrom<jwk::Jwk> for JwkEntry {
+    type Error = JwkError;
+    fn try_from(j: jwk::Jwk) -> Result<Self, Self::Error> {
+        JwkEntry::from_jsonwebkey_ref(&j)
+    }
 }
 
 /// An error with the overall set of JSON Web Keys.
