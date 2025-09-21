@@ -29,7 +29,9 @@ impl Jwks {
     /// # Arguments
     /// * `oidc_url` - The url with OpenID configuration, e.g. https://accounts.google.com/.well-known/openid-configuration
     pub async fn from_oidc_url(oidc_url: impl Into<String>) -> Result<Self, JwksError> {
-        Self::from_oidc_url_with_client(&reqwest::Client::default(), oidc_url).await
+        let url_str = oidc_url.into();
+        Self::validate_url_scheme(&url_str)?;
+        Self::from_oidc_url_with_client(&reqwest::Client::default(), url_str).await
     }
 
     /// A version of [`from_oidc_url`][Self::from_oidc_url] that allows for
@@ -52,7 +54,9 @@ impl Jwks {
     /// # Arguments
     /// * `jwks_url` - The url which JWKS info is pulled from, e.g. https://www.googleapis.com/oauth2/v3/certs
     pub async fn from_jwks_url(jwks_url: impl Into<String>) -> Result<Self, JwksError> {
-        Self::from_jwks_url_with_client(&reqwest::Client::default(), jwks_url.into()).await
+        let url_str = jwks_url.into();
+        Self::validate_url_scheme(&url_str)?;
+        Self::from_jwks_url_with_client(&reqwest::Client::default(), url_str).await
     }
 
     /// A version of [`from_jwks_url`][Self::from_jwks_url] that allows for
@@ -70,6 +74,13 @@ impl Jwks {
         }
 
         Ok(Self { keys })
+    }
+
+    fn validate_url_scheme(url: &str) -> Result<(), JwksError> {
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err(JwksError::InvalidUrlScheme(url.to_string()));
+        }
+        Ok(())
     }
 }
 
@@ -147,6 +158,10 @@ pub enum JwksError {
     /// fail.
     #[error("there was an error with an individual key: {0}")]
     KeyError(#[from] JwkError),
+
+    /// The URL is missing a required scheme (http:// or https://).
+    #[error("URL scheme is required - URL must start with http:// or https://. Got: {0}")]
+    InvalidUrlScheme(String),
 }
 
 /// An error with a specific key from a JWKS.
@@ -536,6 +551,18 @@ mod tests {
 
         let result = Jwks::from_oidc_url(&server.url("/invalid-oidc")).await;
         assert!(matches!(result, Err(JwksError::FetchError(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_url_without_scheme() {
+        let result = Jwks::from_jwks_url("example.com/.well-known/jwks.json").await;
+        assert!(matches!(result, Err(JwksError::InvalidUrlScheme(_))));
+    }
+
+    #[tokio::test]
+    async fn handles_oidc_url_without_scheme() {
+        let result = Jwks::from_oidc_url("accounts.google.com/.well-known/openid-configuration").await;
+        assert!(matches!(result, Err(JwksError::InvalidUrlScheme(_))));
     }
 
     #[tokio::test]
