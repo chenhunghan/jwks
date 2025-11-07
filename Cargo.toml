@@ -14,11 +14,15 @@ keywords = ["jwt", "jsonwebtoken", "jwks"]
 
 [dependencies]
 base64 = "0.22.1"
-jsonwebtoken = "9.3.1"
+jsonwebtoken = "10.2.0"
 reqwest = { version = "0.12.12", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1.0.195", features = ["derive"] }
 thiserror = "1.0.56"
 tokio = { version = "1.35.1", features = ["full"] }
+
+[features]
+aws_lc_rs = [ "jsonwebtoken/aws_lc_rs" ]
+rust_crypto = [ "jsonwebtoken/rust_crypto" ]
 
 [dev-dependencies]
 httpmock = "0.7"
