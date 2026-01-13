@@ -4,7 +4,6 @@ version = "0.5.2"
 edition = "2021"
 authors = ["Hung-Han Chen <chenhungh@gmail.com>"]
 description = "A library for retrieving and parsing JSON Web Key Sets (JWKS)"
-license = "MIT"
 license-file = "LICENSE"
 repository = "https://github.com/chenhunghan/jwks"
 readme = "README.md"
