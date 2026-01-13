@@ -20,6 +20,7 @@ serde = { version = "1.0.195", features = ["derive"] }
 thiserror = "2"
 
 [features]
+default = ["rust_crypto"]
 aws_lc_rs = [ "jsonwebtoken/aws_lc_rs" ]
 rust_crypto = [ "jsonwebtoken/rust_crypto" ]
 
