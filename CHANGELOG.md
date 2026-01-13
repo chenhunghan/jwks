@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/chenhunghan/jwks/compare/v0.5.1...v0.5.2) (2026-01-13)
+
+
+### Bug Fixes
+
+* enable rust_crypto feature by default for jsonwebtoken 10.x ([034a14e](https://github.com/chenhunghan/jwks/commit/034a14e7eb39df42742b4095ea464bde83559472))
+
 ## [0.5.1](https://github.com/chenhunghan/jwks/compare/v0.5.0...v0.5.1) (2025-09-21)
 
 
