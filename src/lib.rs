@@ -771,8 +771,8 @@ mod tests {
         let public_key = private_key.to_public_key();
 
         // Extract components for JWKS
-        let n = URL_SAFE_NO_PAD.encode(&public_key.n().to_bytes_be());
-        let e = URL_SAFE_NO_PAD.encode(&public_key.e().to_bytes_be());
+        let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
+        let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
 
         // Create JWKS with the public key
         let jwks_data = json!({
@@ -907,8 +907,8 @@ mod tests {
         let public_key = private_key.to_public_key();
 
         // Extract components for JWKS
-        let n = URL_SAFE_NO_PAD.encode(&public_key.n().to_bytes_be());
-        let e = URL_SAFE_NO_PAD.encode(&public_key.e().to_bytes_be());
+        let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
+        let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
 
         // Create OIDC configuration
         let oidc_config = json!({

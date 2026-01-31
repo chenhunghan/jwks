@@ -2,6 +2,7 @@
 name = "jwks"
 version = "0.5.2"
 edition = "2021"
+rust-version = "1.85"
 authors = ["Hung-Han Chen <chenhungh@gmail.com>"]
 description = "A library for retrieving and parsing JSON Web Key Sets (JWKS)"
 license-file = "LICENSE"
