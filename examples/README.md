@@ -15,10 +15,12 @@ cargo run --example <example_name>
 ### `basic_usage.rs`
 
 Demonstrates basic JWKS functionality:
+
 - Fetching JWKS directly from a URL
 - Fetching JWKS via OpenID Connect discovery
 
 **Run with:**
+
 ```bash
 cargo run --example basic_usage
 ```
@@ -26,6 +28,7 @@ cargo run --example basic_usage
 ### `jwt_validation.rs`
 
 Shows how to use the library with `jsonwebtoken` for JWT validation:
+
 - Extracting Key ID (kid) from JWT header
 - Fetching JWKS from provider
 - Finding matching key
@@ -34,6 +37,7 @@ Shows how to use the library with `jsonwebtoken` for JWT validation:
 This example includes a mock JWT that uses Google's actual Key ID from their JWKS endpoint, demonstrating the complete validation workflow.
 
 **Run with:**
+
 ```bash
 cargo run --example jwt_validation
 ```
@@ -41,11 +45,13 @@ cargo run --example jwt_validation
 ### `generate_jwt.rs`
 
 Helper script to generate mock JWTs for testing:
+
 - Creates JWTs with Google's actual Key ID
 - Uses proper OAuth2 claim structure
 - Includes timestamp-based expiration
 
 **Run with:**
+
 ```bash
 cargo run --example generate_jwt
 ```
@@ -59,6 +65,7 @@ Most examples require internet connectivity to fetch JWKS from external provider
 ## Customization
 
 Feel free to modify these examples for your specific use case:
+
 - Change the JWKS URLs to match your provider
 - Modify validation parameters
 - Add custom claims structures

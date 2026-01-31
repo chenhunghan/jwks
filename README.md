@@ -1,4 +1,5 @@
 # jwks
+
 Fetch and parse JSON Web Key Set (JWKS)
 
 ```
@@ -12,12 +13,14 @@ cargo add jwks
 ### Basic Usage
 
 From a jwks url:
+
 ```rust
 let jwks_url = "https://www.googleapis.com/oauth2/v3/certs";
 let jwks = Jwks::from_jwks_url(jwks_url).await.unwrap();
 ```
 
 From a openid config url:
+
 ```rust
 let openid_config_url = "https://accounts.google.com/.well-known/openid-configuration";
 let jwks = Jwks::from_oidc_url(openid_config_url).await.unwrap();

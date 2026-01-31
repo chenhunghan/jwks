@@ -20,8 +20,8 @@ thiserror = "2"
 
 [features]
 default = ["rust_crypto"]
-aws_lc_rs = [ "jsonwebtoken/aws_lc_rs" ]
-rust_crypto = [ "jsonwebtoken/rust_crypto" ]
+aws_lc_rs = ["jsonwebtoken/aws_lc_rs"]
+rust_crypto = ["jsonwebtoken/rust_crypto"]
 
 [dev-dependencies]
 httpmock = "0.7"

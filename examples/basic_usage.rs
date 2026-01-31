@@ -32,7 +32,10 @@ async fn main() {
     let openid_config_url = "https://accounts.google.com/.well-known/openid-configuration";
     match Jwks::from_oidc_url(openid_config_url).await {
         Ok(jwks) => {
-            println!("✅ Successfully fetched {} keys via OpenID discovery", jwks.keys.len());
+            println!(
+                "✅ Successfully fetched {} keys via OpenID discovery",
+                jwks.keys.len()
+            );
             for (kid, jwk) in &jwks.keys {
                 println!("  - Key ID: {}, Algorithm: {:?}", kid, jwk.alg);
             }
@@ -43,6 +46,8 @@ async fn main() {
         }
     }
 
-    println!("\n💡 Tip: Both examples demonstrate successful library usage when network is available");
+    println!(
+        "\n💡 Tip: Both examples demonstrate successful library usage when network is available"
+    );
     println!("\n📚 For more advanced usage, see the jwt_validation.rs example");
 }
