@@ -87,7 +87,10 @@ impl Jwks {
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct Jwk {
-    pub alg: KeyAlgorithm,
+    /// The algorithm intended for use with this key.
+    /// Per RFC 7517, this field is optional. When absent, the caller should
+    /// determine the algorithm from another source (e.g., the JWT header's `alg` field).
+    pub alg: Option<KeyAlgorithm>,
     pub decoding_key: DecodingKey,
 }
 
@@ -101,9 +104,7 @@ impl JwkEntry {
     pub fn from_jsonwebkey_ref(jwk: &jwk::Jwk) -> Result<Self, JwkError> {
         let kid = jwk.common.key_id.clone().ok_or(JwkError::MissingKeyId)?;
 
-        let alg = jwk.common.key_algorithm.ok_or(JwkError::MissingAlgorithm {
-            key_id: kid.clone(),
-        })?;
+        let alg = jwk.common.key_algorithm;
 
         let decoding_key = match &jwk.algorithm {
             jwk::AlgorithmParameters::RSA(params) => {
@@ -233,14 +234,14 @@ mod tests {
                 .get("91413cf4fa0cb92a3c3f5a054509132c47660937")
                 .unwrap()
                 .alg,
-            KeyAlgorithm::RS256
+            Some(KeyAlgorithm::RS256)
         );
         assert_eq!(
             jwks.keys
                 .get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781")
                 .unwrap()
                 .alg,
-            KeyAlgorithm::RS256
+            Some(KeyAlgorithm::RS256)
         );
 
         // get keys by key id (kid)
@@ -366,14 +367,14 @@ mod tests {
                 .get("91413cf4fa0cb92a3c3f5a054509132c47660937")
                 .unwrap()
                 .alg,
-            KeyAlgorithm::RS256
+            Some(KeyAlgorithm::RS256)
         );
         assert_eq!(
             jwks.keys
                 .get("1f40f0a8ef3d880978dc82f25c3ec317c6a5b781")
                 .unwrap()
                 .alg,
-            KeyAlgorithm::RS256
+            Some(KeyAlgorithm::RS256)
         );
 
         // get keys by key id (kid)
@@ -500,7 +501,7 @@ mod tests {
                 "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
                 "e": "AQAB",
                 "kid": "no-alg-key"
-                // Missing alg
+                // Missing alg - per RFC 7517, alg is optional
             }]
         });
 
@@ -511,10 +512,10 @@ mod tests {
                 .body(jwks.to_string());
         });
 
-        let result = Jwks::from_jwks_url(&server.url("/no-alg")).await;
-        assert!(
-            matches!(result, Err(JwksError::KeyError(JwkError::MissingAlgorithm { key_id })) if key_id == "no-alg-key")
-        );
+        let jwks = Jwks::from_jwks_url(&server.url("/no-alg")).await.unwrap();
+        assert_eq!(jwks.keys.len(), 1);
+        let key = jwks.keys.get("no-alg-key").unwrap();
+        assert_eq!(key.alg, None);
     }
 
     #[tokio::test]
@@ -602,7 +603,7 @@ mod tests {
 
         // Test P-256 key
         let p256_key = jwks.keys.get("ec-p256-key").unwrap();
-        assert_eq!(p256_key.alg, KeyAlgorithm::ES256);
+        assert_eq!(p256_key.alg, Some(KeyAlgorithm::ES256));
     }
 
     #[tokio::test]
@@ -744,15 +745,15 @@ mod tests {
 
         // Test RSA key
         let rsa_key = jwks.keys.get("rsa-key").unwrap();
-        assert_eq!(rsa_key.alg, KeyAlgorithm::RS256);
+        assert_eq!(rsa_key.alg, Some(KeyAlgorithm::RS256));
 
         // Test EC key
         let ec_key = jwks.keys.get("ec-key").unwrap();
-        assert_eq!(ec_key.alg, KeyAlgorithm::ES256);
+        assert_eq!(ec_key.alg, Some(KeyAlgorithm::ES256));
 
         // Test symmetric key
         let symmetric_key = jwks.keys.get("symmetric-key").unwrap();
-        assert_eq!(symmetric_key.alg, KeyAlgorithm::HS256);
+        assert_eq!(symmetric_key.alg, Some(KeyAlgorithm::HS256));
     }
 
     #[tokio::test]
