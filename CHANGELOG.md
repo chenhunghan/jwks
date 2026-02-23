@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/chenhunghan/jwks/compare/v0.5.2...v0.5.3) (2026-02-23)
+
+
+### Bug Fixes
+
+* make alg optional per RFC 7517 ([97f074f](https://github.com/chenhunghan/jwks/commit/97f074f4819e1c8af044d5aaaf8dfe0ef7bf0bee))
+
 ## [0.5.2](https://github.com/chenhunghan/jwks/compare/v0.5.1...v0.5.2) (2026-01-13)
 
 
