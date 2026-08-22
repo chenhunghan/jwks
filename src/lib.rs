@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::{
     jwk::{self, KeyAlgorithm},
     DecodingKey,
@@ -106,32 +105,11 @@ impl JwkEntry {
 
         let alg = jwk.common.key_algorithm;
 
-        let decoding_key = match &jwk.algorithm {
-            jwk::AlgorithmParameters::RSA(params) => {
-                DecodingKey::from_rsa_components(&params.n, &params.e)
-            }
-            jwk::AlgorithmParameters::EllipticCurve(params) => {
-                DecodingKey::from_ec_components(&params.x, &params.y)
-            }
-            jwk::AlgorithmParameters::OctetKeyPair(params) => {
-                DecodingKey::from_ed_components(&params.x)
-            }
-            jwk::AlgorithmParameters::OctetKey(params) => {
-                // same as https://github.com/Keats/jsonwebtoken/blob/master/src/serialization.rs#L11
-                let base64_decoded = URL_SAFE_NO_PAD.decode(&params.value).map_err(|err| {
-                    JwkError::DecodingError {
-                        key_id: kid.clone(),
-                        error: err.into(),
-                    }
-                })?;
-
-                Ok(DecodingKey::from_secret(&base64_decoded))
-            }
-        }
-        .map_err(|err| JwkError::DecodingError {
-            key_id: kid.clone(),
-            error: err,
-        })?;
+        let decoding_key = DecodingKey::from_jwk(jwk)
+            .map_err(|err| JwkError::DecodingError {
+                key_id: kid.clone(),
+                error: err,
+            })?;
 
         Ok(Self {
             kid,
@@ -187,6 +165,7 @@ pub enum JwkError {
 
 #[cfg(test)]
 mod tests {
+    use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
 
     use super::*;
@@ -633,7 +612,7 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
-        assert!(matches!(result, Err(JwksError::FetchError(_))));
+        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError{ .. }))));
     }
 
     #[tokio::test]
@@ -696,7 +675,7 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
-        assert!(matches!(result, Err(JwksError::FetchError(_))));
+        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError { .. }))));
     }
 
     #[tokio::test]
