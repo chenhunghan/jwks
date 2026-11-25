@@ -1,11 +1,19 @@
 // Mostly edit from https://github.com/cdriehuys/axum-jwks/blob/main/axum-jwks/src/jwks.rs
 
+//! Fetch and parse JSON Web Key Sets (JWKS).
+//!
+//! With the default `http` feature, `Jwks::from_jwks_url` and
+//! `Jwks::from_oidc_url` fetch keys with an async `reqwest` client.
+//! Without it, the crate does no I/O: fetch the JWKS with any client and
+//! build a [`Jwks`] with [`Jwks::from_json`] or [`Jwks::from_jwk_set`].
+
 use std::{collections::HashMap, str::FromStr};
 
 use jsonwebtoken::{
     jwk::{self, AlgorithmParameters, KeyAlgorithm, KeyOperations, PublicKeyUse},
     Algorithm, DecodingKey,
 };
+#[cfg(feature = "http")]
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -21,14 +29,55 @@ pub struct Jwks {
     pub unsupported: Vec<UnsupportedKey>,
 }
 
+#[cfg(feature = "http")]
 #[derive(Deserialize)]
 struct OIDCConfig {
     jwks_uri: String,
 }
 
 impl Jwks {
+    /// Builds a [`Jwks`] from a JWKS JSON document, without any I/O.
+    ///
+    /// Keys that cannot be used for signature verification are skipped and
+    /// listed in [`Jwks::unsupported`].
+    ///
+    /// ```
+    /// let json = r#"{"keys": [{"kty": "oct", "alg": "HS256", "kid": "k1", "k": "c2VjcmV0"}]}"#;
+    /// let jwks = jwks::Jwks::from_json(json).unwrap();
+    /// assert!(jwks.keys.contains_key("k1"));
+    /// ```
+    pub fn from_json(json: &str) -> Result<Self, JwksError> {
+        let jwk_set: jwk::JwkSet = serde_json::from_str(json)?;
+        Self::from_jwk_set(&jwk_set)
+    }
+
+    /// Builds a [`Jwks`] from an already parsed [`JwkSet`][jwk::JwkSet], without any I/O.
+    ///
+    /// Keys that cannot be used for signature verification are skipped and
+    /// listed in [`Jwks::unsupported`].
+    pub fn from_jwk_set(jwk_set: &jwk::JwkSet) -> Result<Self, JwksError> {
+        let mut keys = HashMap::new();
+        let mut unsupported = Vec::new();
+        for jwk in &jwk_set.keys {
+            match JwkEntry::from_jsonwebkey_ref(jwk) {
+                Ok(JwkEntry { kid, jwk }) => {
+                    keys.insert(kid, jwk);
+                }
+                Err(JwkError::Unsupported(key)) => unsupported.push(key),
+                Err(err) => return Err(err.into()),
+            }
+        }
+
+        if keys.is_empty() {
+            return Err(JwksError::NoUsableKeys { unsupported });
+        }
+
+        Ok(Self { keys, unsupported })
+    }
+
     /// # Arguments
     /// * `oidc_url` - The url with OpenID configuration, e.g. https://accounts.google.com/.well-known/openid-configuration
+    #[cfg(feature = "http")]
     pub async fn from_oidc_url(oidc_url: impl Into<String>) -> Result<Self, JwksError> {
         let url_str = oidc_url.into();
         Self::validate_url_scheme(&url_str)?;
@@ -37,6 +86,7 @@ impl Jwks {
 
     /// A version of [`from_oidc_url`][Self::from_oidc_url] that allows for
     /// passing in a custom [`Client`][reqwest::Client].
+    #[cfg(feature = "http")]
     pub async fn from_oidc_url_with_client(
         client: &reqwest::Client,
         oidc_url: impl Into<String>,
@@ -54,6 +104,7 @@ impl Jwks {
 
     /// # Arguments
     /// * `jwks_url` - The url which JWKS info is pulled from, e.g. https://www.googleapis.com/oauth2/v3/certs
+    #[cfg(feature = "http")]
     pub async fn from_jwks_url(jwks_url: impl Into<String>) -> Result<Self, JwksError> {
         let url_str = jwks_url.into();
         Self::validate_url_scheme(&url_str)?;
@@ -62,31 +113,16 @@ impl Jwks {
 
     /// A version of [`from_jwks_url`][Self::from_jwks_url] that allows for
     /// passing in a custom [`Client`][reqwest::Client].
+    #[cfg(feature = "http")]
     pub async fn from_jwks_url_with_client(
         client: &reqwest::Client,
         jwks_url: impl Into<String>,
     ) -> Result<Self, JwksError> {
-        let jwks: jwk::JwkSet = client.get(jwks_url.into()).send().await?.json().await?;
-
-        let mut keys = HashMap::new();
-        let mut unsupported = Vec::new();
-        for jwk in jwks.keys {
-            match JwkEntry::try_from(jwk) {
-                Ok(JwkEntry { kid, jwk }) => {
-                    keys.insert(kid, jwk);
-                }
-                Err(JwkError::Unsupported(key)) => unsupported.push(key),
-                Err(err) => return Err(err.into()),
-            }
-        }
-
-        if keys.is_empty() {
-            return Err(JwksError::NoUsableKeys { unsupported });
-        }
-
-        Ok(Self { keys, unsupported })
+        let jwk_set: jwk::JwkSet = client.get(jwks_url.into()).send().await?.json().await?;
+        Self::from_jwk_set(&jwk_set)
     }
 
+    #[cfg(feature = "http")]
     fn validate_url_scheme(url: &str) -> Result<(), JwksError> {
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return Err(JwksError::InvalidUrlScheme(url.to_string()));
@@ -176,6 +212,13 @@ fn check_supported(jwk: &jwk::Jwk) -> Result<(), UnsupportedReason> {
     }
 }
 
+impl TryFrom<jwk::JwkSet> for Jwks {
+    type Error = JwksError;
+    fn try_from(jwk_set: jwk::JwkSet) -> Result<Self, Self::Error> {
+        Jwks::from_jwk_set(&jwk_set)
+    }
+}
+
 impl TryFrom<jwk::Jwk> for JwkEntry {
     type Error = JwkError;
     fn try_from(j: jwk::Jwk) -> Result<Self, Self::Error> {
@@ -189,8 +232,13 @@ impl TryFrom<jwk::Jwk> for JwkEntry {
 pub enum JwksError {
     /// There was an error fetching the OIDC or JWKS config from
     /// the specified url.
+    #[cfg(feature = "http")]
     #[error("could not fetch config from authority: {0}")]
     FetchError(#[from] reqwest::Error),
+
+    /// The JWKS document is not valid JSON or not a JWK Set.
+    #[error("could not parse the JWKS: {0}")]
+    ParseError(#[from] serde_json::Error),
 
     /// An error with an individual key caused the processing of the JWKS to
     /// fail.
@@ -198,6 +246,7 @@ pub enum JwksError {
     KeyError(#[from] JwkError),
 
     /// The URL is missing a required scheme (http:// or https://).
+    #[cfg(feature = "http")]
     #[error("URL scheme is required - URL must start with http:// or https://. Got: {0}")]
     InvalidUrlScheme(String),
 
@@ -262,6 +311,58 @@ pub enum JwkError {
 }
 
 #[cfg(test)]
+mod sync_tests {
+    use super::*;
+
+    const HMAC_KEY: &str =
+        r#"{"kty": "oct", "alg": "HS256", "kid": "hmac", "k": "GawgguFyGrWKav7AX4VKUg"}"#;
+
+    #[test]
+    fn from_json_builds_keys_without_io() {
+        let jwks = Jwks::from_json(&format!(r#"{{"keys": [{HMAC_KEY}]}}"#)).unwrap();
+        assert!(jwks.keys.contains_key("hmac"));
+        assert!(jwks.unsupported.is_empty());
+    }
+
+    #[test]
+    fn from_json_skips_unsupported_keys() {
+        let json =
+            format!(r#"{{"keys": [{HMAC_KEY}, {{"kty": "AKP", "pub": "AAAA", "kid": "pq"}}]}}"#);
+        let jwks = Jwks::from_json(&json).unwrap();
+        assert_eq!(jwks.keys.len(), 1);
+        assert_eq!(jwks.unsupported[0].kid.as_deref(), Some("pq"));
+    }
+
+    #[test]
+    fn from_json_rejects_invalid_json() {
+        assert!(matches!(
+            Jwks::from_json("not json"),
+            Err(JwksError::ParseError(_))
+        ));
+        assert!(matches!(
+            Jwks::from_json(r#"{"no_keys": []}"#),
+            Err(JwksError::ParseError(_))
+        ));
+    }
+
+    #[test]
+    fn from_json_rejects_set_without_usable_keys() {
+        assert!(matches!(
+            Jwks::from_json(r#"{"keys": []}"#),
+            Err(JwksError::NoUsableKeys { .. })
+        ));
+    }
+
+    #[test]
+    fn try_from_jwk_set_matches_from_jwk_set() {
+        let set: jwk::JwkSet =
+            serde_json::from_str(&format!(r#"{{"keys": [{HMAC_KEY}]}}"#)).unwrap();
+        let jwks = Jwks::try_from(set).unwrap();
+        assert!(jwks.keys.contains_key("hmac"));
+    }
+}
+
+#[cfg(all(test, feature = "http"))]
 mod tests {
     use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
