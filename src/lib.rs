@@ -128,11 +128,10 @@ impl JwkEntry {
 
         let alg = jwk.common.key_algorithm;
 
-        let decoding_key = DecodingKey::from_jwk(jwk)
-            .map_err(|err| JwkError::DecodingError {
-                key_id: kid.clone(),
-                error: err,
-            })?;
+        let decoding_key = DecodingKey::from_jwk(jwk).map_err(|err| JwkError::DecodingError {
+            key_id: kid.clone(),
+            error: err,
+        })?;
 
         Ok(Self {
             kid,
