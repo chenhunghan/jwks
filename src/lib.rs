@@ -1,10 +1,10 @@
 // Mostly edit from https://github.com/cdriehuys/axum-jwks/blob/main/axum-jwks/src/jwks.rs
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use jsonwebtoken::{
-    jwk::{self, KeyAlgorithm},
-    DecodingKey,
+    jwk::{self, AlgorithmParameters, KeyAlgorithm, KeyOperations, PublicKeyUse},
+    Algorithm, DecodingKey,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -17,6 +17,8 @@ use thiserror::Error;
 #[allow(dead_code)]
 pub struct Jwks {
     pub keys: HashMap<String, Jwk>,
+    /// Keys that were left out because they cannot be used for signature verification.
+    pub unsupported: Vec<UnsupportedKey>,
 }
 
 #[derive(Deserialize)]
@@ -67,12 +69,22 @@ impl Jwks {
         let jwks: jwk::JwkSet = client.get(jwks_url.into()).send().await?.json().await?;
 
         let mut keys = HashMap::new();
+        let mut unsupported = Vec::new();
         for jwk in jwks.keys {
-            let JwkEntry { kid, jwk } = jwk.try_into()?;
-            keys.insert(kid, jwk);
+            match JwkEntry::try_from(jwk) {
+                Ok(JwkEntry { kid, jwk }) => {
+                    keys.insert(kid, jwk);
+                }
+                Err(JwkError::Unsupported(key)) => unsupported.push(key),
+                Err(err) => return Err(err.into()),
+            }
         }
 
-        Ok(Self { keys })
+        if keys.is_empty() {
+            return Err(JwksError::NoUsableKeys { unsupported });
+        }
+
+        Ok(Self { keys, unsupported })
     }
 
     fn validate_url_scheme(url: &str) -> Result<(), JwksError> {
@@ -100,7 +112,18 @@ pub struct JwkEntry {
 }
 
 impl JwkEntry {
+    /// Converts a JWK into a decoding key entry.
+    ///
+    /// Returns [`JwkError::Unsupported`] for keys that cannot be used for
+    /// signature verification, see [`UnsupportedReason`].
     pub fn from_jsonwebkey_ref(jwk: &jwk::Jwk) -> Result<Self, JwkError> {
+        check_supported(jwk).map_err(|reason| {
+            JwkError::Unsupported(UnsupportedKey {
+                kid: jwk.common.key_id.clone(),
+                reason,
+            })
+        })?;
+
         let kid = jwk.common.key_id.clone().ok_or(JwkError::MissingKeyId)?;
 
         let alg = jwk.common.key_algorithm;
@@ -118,6 +141,42 @@ impl JwkEntry {
     }
 }
 
+/// Checks whether a key can be used for signature verification.
+fn check_supported(jwk: &jwk::Jwk) -> Result<(), UnsupportedReason> {
+    if let Some(key_use) = &jwk.common.public_key_use {
+        if *key_use != PublicKeyUse::Signature {
+            return Err(UnsupportedReason::Use(key_use.clone()));
+        }
+    }
+
+    if let Some(key_ops) = &jwk.common.key_operations {
+        if !key_ops.contains(&KeyOperations::Verify) {
+            return Err(UnsupportedReason::KeyOps(key_ops.clone()));
+        }
+    }
+
+    if let Some(alg) = jwk.common.key_algorithm {
+        if Algorithm::from_str(&alg.to_string()).is_err() {
+            return Err(UnsupportedReason::Algorithm(alg));
+        }
+    }
+
+    match &jwk.algorithm {
+        AlgorithmParameters::RSA(_)
+        | AlgorithmParameters::EllipticCurve(_)
+        | AlgorithmParameters::OctetKey(_)
+        | AlgorithmParameters::OctetKeyPair(_) => Ok(()),
+        AlgorithmParameters::Other(params) => Err(UnsupportedReason::UnknownKey {
+            kty: params
+                .fields
+                .get("kty")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned),
+        }),
+        _ => Err(UnsupportedReason::UnknownKey { kty: None }),
+    }
+}
+
 impl TryFrom<jwk::Jwk> for JwkEntry {
     type Error = JwkError;
     fn try_from(j: jwk::Jwk) -> Result<Self, Self::Error> {
@@ -127,6 +186,7 @@ impl TryFrom<jwk::Jwk> for JwkEntry {
 
 /// An error with the overall set of JSON Web Keys.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum JwksError {
     /// There was an error fetching the OIDC or JWKS config from
     /// the specified url.
@@ -141,10 +201,41 @@ pub enum JwksError {
     /// The URL is missing a required scheme (http:// or https://).
     #[error("URL scheme is required - URL must start with http:// or https://. Got: {0}")]
     InvalidUrlScheme(String),
+
+    /// The JWKS contains no key usable for signature verification.
+    #[error("the JWKS contains no usable keys ({} unsupported)", unsupported.len())]
+    NoUsableKeys { unsupported: Vec<UnsupportedKey> },
+}
+
+/// A key that cannot be used for signature verification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedKey {
+    pub kid: Option<String>,
+    pub reason: UnsupportedReason,
+}
+
+/// Why a key cannot be used for signature verification.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum UnsupportedReason {
+    /// Key parameters not recognized by jsonwebtoken: an unknown key type or
+    /// curve, or a known key type with missing fields.
+    #[error("unrecognized key parameters (kty: {kty:?})")]
+    UnknownKey { kty: Option<String> },
+    /// Algorithm (`alg`) is unknown or not a signature algorithm.
+    #[error("unsupported algorithm {0}")]
+    Algorithm(KeyAlgorithm),
+    /// Key is not meant for signatures (`use`).
+    #[error("key use is not \"sig\": {0:?}")]
+    Use(PublicKeyUse),
+    /// Key operations (`key_ops`) do not include `verify`.
+    #[error("key operations do not include \"verify\": {0:?}")]
+    KeyOps(Vec<KeyOperations>),
 }
 
 /// An error with a specific key from a JWKS.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum JwkError {
     /// There was an error constructing the decoding key from the RSA components
     /// provided by the key.
@@ -161,6 +252,14 @@ pub enum JwkError {
     /// The key is missing the `kid` attribute.
     #[error("the key is missing the `kid` attribute")]
     MissingKeyId,
+
+    /// The key cannot be used for signature verification.
+    #[error(
+        "the key {} is unsupported: {}",
+        .0.kid.as_deref().unwrap_or("<no kid>"),
+        .0.reason
+    )]
+    Unsupported(UnsupportedKey),
 }
 
 #[cfg(test)]
@@ -509,8 +608,246 @@ mod tests {
                 .body(jwks.to_string());
         });
 
-        let jwks = Jwks::from_jwks_url(&server.url("/empty")).await.unwrap();
-        assert_eq!(jwks.keys.len(), 0);
+        let result = Jwks::from_jwks_url(&server.url("/empty")).await;
+        assert!(matches!(
+            result,
+            Err(JwksError::NoUsableKeys { unsupported }) if unsupported.is_empty()
+        ));
+    }
+
+    #[tokio::test]
+    async fn skips_unsupported_keys() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "use": "sig",
+                    "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+                    "e": "AQAB",
+                    "kid": "rsa-sig"
+                },
+                {
+                    "kty": "AKP",
+                    "alg": "ML-DSA-44",
+                    "pub": "AAAA",
+                    "kid": "unknown-kty"
+                },
+                {
+                    "kty": "OKP",
+                    "crv": "Ed448",
+                    "x": "AAAA",
+                    "kid": "unknown-curve"
+                },
+                {
+                    "kty": "RSA",
+                    "use": "enc",
+                    "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+                    "e": "AQAB",
+                    "kid": "rsa-enc"
+                },
+                {
+                    "kty": "RSA",
+                    "alg": "RSA-OAEP",
+                    "n": "jb1Ps3fdt0oPYPbQlfZqKkCXrM1qJ5EkfBHSMrPXPzh9QLwa43WCLEdrTcf5vI8cNwbgSxDlCDS2BzHQC0hYPwFkJaD6y6NIIcwdSMcKlQPwk4-sqJbz55_gyUWjifcpXXKbXDdnd2QzSE2YipareOPJaBs3Ybuvf_EePnYoKEhXNeGm_T3546A56uOV2mNEe6e-RaIa76i8kcx_8JP3FjqxZSWRrmGYwZJhTGbeY5pfOS6v_EYpA4Up1kZANWReeC3mgh3O78f5nKEDxwPf99bIQ22fIC2779HbfzO-ybqR_EJ0zv8LlqfT7dMjZs25LH8Jw5wGWjP_9efP8emTOw",
+                    "e": "AQAB"
+                    // No kid: unsupported keys may omit it
+                }
+            ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/unsupported");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url("/unsupported"))
+            .await
+            .unwrap();
+        assert_eq!(jwks.keys.len(), 1);
+        assert!(jwks.keys.contains_key("rsa-sig"));
+
+        let unsupported: Vec<_> = jwks
+            .unsupported
+            .iter()
+            .map(|k| (k.kid.as_deref(), k.reason.clone()))
+            .collect();
+        assert_eq!(
+            unsupported,
+            vec![
+                (
+                    Some("unknown-kty"),
+                    UnsupportedReason::Algorithm(KeyAlgorithm::UNKNOWN_ALGORITHM)
+                ),
+                (
+                    Some("unknown-curve"),
+                    UnsupportedReason::UnknownKey {
+                        kty: Some("OKP".to_owned())
+                    }
+                ),
+                (
+                    Some("rsa-enc"),
+                    UnsupportedReason::Use(PublicKeyUse::Encryption)
+                ),
+                (None, UnsupportedReason::Algorithm(KeyAlgorithm::RSA_OAEP)),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn skips_unknown_key_type_without_alg() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [
+                {
+                    "kty": "oct",
+                    "alg": "HS256",
+                    "k": "GawgguFyGrWKav7AX4VKUg",
+                    "kid": "hmac"
+                },
+                {
+                    "kty": "AKP",
+                    "pub": "AAAA",
+                    "kid": "unknown-kty"
+                }
+            ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/unknown-kty");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url("/unknown-kty"))
+            .await
+            .unwrap();
+        assert!(jwks.keys.contains_key("hmac"));
+        assert_eq!(
+            jwks.unsupported,
+            vec![UnsupportedKey {
+                kid: Some("unknown-kty".to_owned()),
+                reason: UnsupportedReason::UnknownKey {
+                    kty: Some("AKP".to_owned())
+                },
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn skips_keys_without_verify_key_op() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [
+                {
+                    "kty": "oct",
+                    "alg": "HS256",
+                    "key_ops": ["sign", "verify"],
+                    "k": "GawgguFyGrWKav7AX4VKUg",
+                    "kid": "verify"
+                },
+                {
+                    "kty": "oct",
+                    "alg": "HS256",
+                    "key_ops": ["encrypt"],
+                    "k": "GawgguFyGrWKav7AX4VKUg",
+                    "kid": "encrypt"
+                }
+            ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/key-ops");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let jwks = Jwks::from_jwks_url(&server.url("/key-ops")).await.unwrap();
+        assert!(jwks.keys.contains_key("verify"));
+        assert_eq!(
+            jwks.unsupported,
+            vec![UnsupportedKey {
+                kid: Some("encrypt".to_owned()),
+                reason: UnsupportedReason::KeyOps(vec![KeyOperations::Encrypt]),
+            }]
+        );
+    }
+
+    #[test]
+    fn unsupported_error_message_formats_kid() {
+        let err = |kid: Option<&str>| {
+            JwkError::Unsupported(UnsupportedKey {
+                kid: kid.map(str::to_owned),
+                reason: UnsupportedReason::Use(PublicKeyUse::Encryption),
+            })
+            .to_string()
+        };
+        assert!(err(Some("abc")).starts_with("the key abc is unsupported"));
+        assert!(err(None).starts_with("the key <no kid> is unsupported"));
+    }
+
+    #[tokio::test]
+    async fn rejects_jwks_with_only_unsupported_keys() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [{
+                "kty": "AKP",
+                "pub": "AAAA",
+                "kid": "unknown-kty"
+            }]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/only-unsupported");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/only-unsupported")).await;
+        assert!(matches!(
+            result,
+            Err(JwksError::NoUsableKeys { unsupported }) if unsupported.len() == 1
+        ));
+    }
+
+    #[tokio::test]
+    async fn rejects_empty_hmac_key() {
+        let server = MockServer::start();
+        let jwks = json!({
+            "keys": [
+                {
+                    "kty": "oct",
+                    "alg": "HS256",
+                    "k": "GawgguFyGrWKav7AX4VKUg",
+                    "kid": "hmac"
+                },
+                {
+                    "kty": "oct",
+                    "alg": "HS256",
+                    "k": "",
+                    "kid": "empty-hmac"
+                }
+            ]
+        });
+
+        let _ = server.mock(|when, then| {
+            when.method(GET).path("/empty-hmac");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(jwks.to_string());
+        });
+
+        let result = Jwks::from_jwks_url(&server.url("/empty-hmac")).await;
+        assert!(matches!(
+            result,
+            Err(JwksError::KeyError(JwkError::DecodingError { key_id, .. })) if key_id == "empty-hmac"
+        ));
     }
 
     #[tokio::test]
@@ -612,7 +949,13 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
-        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError{ .. }))));
+        assert!(matches!(
+            result,
+            Err(JwksError::NoUsableKeys { unsupported }) if unsupported == vec![UnsupportedKey {
+                kid: Some("ec-missing-y".to_owned()),
+                reason: UnsupportedReason::UnknownKey { kty: Some("EC".to_owned()) },
+            }]
+        ));
     }
 
     #[tokio::test]
@@ -675,7 +1018,13 @@ mod tests {
         });
 
         let result = Jwks::from_jwks_url(&server.url(jwks_path)).await;
-        assert!(matches!(result, Err(JwksError::KeyError(JwkError::DecodingError { .. }))));
+        assert!(matches!(
+            result,
+            Err(JwksError::NoUsableKeys { unsupported }) if unsupported == vec![UnsupportedKey {
+                kid: Some("ec-missing-curve".to_owned()),
+                reason: UnsupportedReason::UnknownKey { kty: Some("EC".to_owned()) },
+            }]
+        ));
     }
 
     #[tokio::test]
@@ -746,13 +1095,13 @@ mod tests {
         let jwks_path = "/jwks";
 
         // Generate RSA key pair for the test
-        let mut rng = rand::thread_rng();
-        let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rng();
+        let private_key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let public_key = private_key.to_public_key();
 
         // Extract components for JWKS
-        let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
-        let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
+        let n = URL_SAFE_NO_PAD.encode(public_key.n_bytes());
+        let e = URL_SAFE_NO_PAD.encode(public_key.e_bytes());
 
         // Create JWKS with the public key
         let jwks_data = json!({
@@ -855,7 +1204,7 @@ mod tests {
 
         // Sign JWT with symmetric key
         let header = Header::new(jsonwebtoken::Algorithm::HS256);
-        let encoding_key = EncodingKey::from_secret(symmetric_key);
+        let encoding_key = EncodingKey::from_secret(symmetric_key).unwrap();
         let token = encode(&header, &claims, &encoding_key).unwrap();
 
         // Verify JWT using the fetched JWKS
@@ -882,13 +1231,13 @@ mod tests {
         let jwks_url = oidc_server.url(jwks_path);
 
         // Generate RSA key pair for the test
-        let mut rng = rand::thread_rng();
-        let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let mut rng = rand::rng();
+        let private_key = rsa::PrivateKey::new(&mut rng, 2048).unwrap();
         let public_key = private_key.to_public_key();
 
         // Extract components for JWKS
-        let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
-        let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
+        let n = URL_SAFE_NO_PAD.encode(public_key.n_bytes());
+        let e = URL_SAFE_NO_PAD.encode(public_key.e_bytes());
 
         // Create OIDC configuration
         let oidc_config = json!({
