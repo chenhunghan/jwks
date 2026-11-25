@@ -11,7 +11,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release-please.outputs.release_created }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release-please
         with:
           token: ${{ secrets.JWKS_RELEASE_PLEASE_PAT }}
@@ -21,7 +21,7 @@ jobs:
     if: needs.release-please.outputs.release_created
     environment: crates.io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal
       - uses: swatinem/rust-cache@v2
       - run: cargo publish --token ${{ secrets.JWKS_CARGO_REGISTRY_TOKEN }}
