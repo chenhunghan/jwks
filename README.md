@@ -19,10 +19,10 @@ cargo add jwks
 
 ### Crypto backend
 
-Enable exactly one backend. `rust_crypto` is the default; to use `aws_lc_rs`, turn the default off:
+Enable exactly one backend. `rust_crypto` is the default; to use `aws_lc_rs`, turn the defaults off and add `http` back if you fetch with this crate:
 
 ```toml
-jwks = { version = "0.7", default-features = false, features = ["aws_lc_rs"] }
+jwks = { version = "0.7", default-features = false, features = ["aws_lc_rs", "http"] }
 ```
 
 Enabling both makes `jsonwebtoken` panic at runtime when it picks a crypto provider.
@@ -63,6 +63,24 @@ for key in &jwks.unsupported {
 ```
 
 Keys with invalid values (bad base64, empty HMAC secret) still fail with `JwksError::KeyError`. A set with no usable key, including an empty one, fails with `JwksError::NoUsableKeys`.
+
+### Without tokio
+
+The `http` feature (on by default) fetches keys with an async `reqwest` client, which needs a tokio runtime. Turn it off to drop reqwest and tokio, fetch the JWKS with any client, and build the key set yourself:
+
+```toml
+jwks = { version = "0.7", default-features = false, features = ["rust_crypto"] }
+```
+
+```rust
+let body = ureq::get("https://www.googleapis.com/oauth2/v3/certs")
+    .call()?
+    .into_body()
+    .read_to_string()?;
+let jwks = Jwks::from_json(&body)?;
+```
+
+`Jwks::from_jwk_set` and `Jwks::try_from(JwkSet)` do the same from an already parsed `jsonwebtoken::jwk::JwkSet`. These work with the `http` feature on too, for example to load keys from a file or cache.
 
 ### JWT Validation
 
