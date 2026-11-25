@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/chenhunghan/jwks/compare/v0.7.0...v0.8.0) (2026-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* fetching is behind the new default `http` feature. If you set `default-features = false` (for example to use `aws_lc_rs`), add `http` to keep `Jwks::from_jwks_url` and `Jwks::from_oidc_url`.
+
+### Features
+
+* add `Jwks::from_json`, `Jwks::from_jwk_set` and `TryFrom<JwkSet>` to build a key set without I/O; with `http` off the crate no longer depends on reqwest or tokio ([14d7ea2](https://github.com/chenhunghan/jwks/commit/14d7ea22bd981bd87b9f17b5423d4b5f4a238bf7))
+* build Jwks without I/O and make reqwest optional ([14d7ea2](https://github.com/chenhunghan/jwks/commit/14d7ea22bd981bd87b9f17b5423d4b5f4a238bf7))
+* re-export `jsonwebtoken` as `jwks::jsonwebtoken`, so users don't need their own matching jsonwebtoken dependency ([14d7ea2](https://github.com/chenhunghan/jwks/commit/14d7ea22bd981bd87b9f17b5423d4b5f4a238bf7))
+
 ## [0.7.0](https://github.com/chenhunghan/jwks/compare/v0.6.0...v0.7.0) (2026-11-25)
 
 
