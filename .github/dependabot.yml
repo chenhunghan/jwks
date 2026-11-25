@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    # Conventional titles so the pr-title check passes and release-please
+    # cuts a patch release for runtime dependency bumps only.
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+    groups:
+      # One weekly PR for all non-breaking updates.
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+    # Major bumps (e.g. jsonwebtoken, reqwest) still come as separate PRs:
+    # they usually change this crate's public API and need a breaking release.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns: ["*"]
