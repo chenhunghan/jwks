@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            toolchain: stable
+            features: ""
+          - name: rust_crypto only
+            toolchain: stable
+            features: --no-default-features --features rust_crypto
+          - name: aws_lc_rs only
+            toolchain: stable
+            features: --no-default-features --features aws_lc_rs
+          - name: msrv
+            toolchain: "1.88"
+            features: ""
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component clippy && rustup default ${{ matrix.toolchain }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+      - run: cargo test ${{ matrix.features }}
+      - run: cargo clippy --all-targets ${{ matrix.features }}
+        if: matrix.toolchain == 'stable'
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install stable --profile minimal --component rustfmt
+      - run: cargo fmt --check
+
+  # Single required check for the ruleset, so the matrix can change freely.
+  ci-ok:
+    if: always()
+    needs: [test, fmt]
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
