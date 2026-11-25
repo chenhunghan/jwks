@@ -6,8 +6,14 @@
 //! `Jwks::from_oidc_url` fetch keys with an async `reqwest` client.
 //! Without it, the crate does no I/O: fetch the JWKS with any client and
 //! build a [`Jwks`] with [`Jwks::from_json`] or [`Jwks::from_jwk_set`].
+//!
+//! The [`jsonwebtoken`] version this crate is built against is re-exported,
+//! so you can decode tokens with `jwks::jsonwebtoken` instead of keeping your
+//! own `jsonwebtoken` dependency on a matching version.
 
 use std::{collections::HashMap, str::FromStr};
+
+pub use jsonwebtoken;
 
 use jsonwebtoken::{
     jwk::{self, AlgorithmParameters, KeyAlgorithm, KeyOperations, PublicKeyUse},

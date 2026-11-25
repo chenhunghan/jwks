@@ -10,7 +10,13 @@ cargo add jwks
 
 ### jsonwebtoken compatibility
 
-`jwks` hands out [`jsonwebtoken`](https://github.com/Keats/jsonwebtoken) types (`DecodingKey`, `KeyAlgorithm`, errors), so your own `jsonwebtoken` dependency must be the same major version:
+`jwks` hands out [`jsonwebtoken`](https://github.com/Keats/jsonwebtoken) types (`DecodingKey`, `KeyAlgorithm`, errors) and re-exports the crate as `jwks::jsonwebtoken`. Use the re-export and you don't need your own `jsonwebtoken` dependency:
+
+```rust
+use jwks::jsonwebtoken::{decode, decode_header, Validation};
+```
+
+If you do depend on `jsonwebtoken` directly, it must be the same major version:
 
 | jwks  | jsonwebtoken | MSRV |
 |-------|--------------|------|
@@ -49,7 +55,7 @@ Each usable key is in `jwks.keys`, indexed by `kid`:
 
 ```rust
 let jwk = jwks.keys.get(kid).expect("unknown kid");
-let token = jsonwebtoken::decode::<Claims>(token, &jwk.decoding_key, &validation)?;
+let token = jwks::jsonwebtoken::decode::<Claims>(token, &jwk.decoding_key, &validation)?;
 ```
 
 ### Unsupported keys

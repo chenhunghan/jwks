@@ -3,7 +3,7 @@
 //! This example demonstrates how to use the jwks library with jsonwebtoken
 //! to validate JWT tokens using keys fetched from a JWKS endpoint.
 
-use jsonwebtoken::{decode, decode_header, Validation};
+use jwks::jsonwebtoken::{decode, decode_header, Validation};
 use jwks::Jwks;
 use serde::{Deserialize, Serialize};
 
