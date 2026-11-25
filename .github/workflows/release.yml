@@ -15,7 +15,6 @@ jobs:
         id: release-please
         with:
           token: ${{ secrets.JWKS_RELEASE_PLEASE_PAT }}
-          release-type: rust
   publish:
     runs-on: ubuntu-latest
     needs: release-please
