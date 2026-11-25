@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/chenhunghan/jwks/compare/v0.6.0...v0.7.0) (2026-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump jsonwebtoken to 12 and skip unsupported keys ([#36](https://github.com/chenhunghan/jwks/issues/36))
+
+### Features
+
+* bump jsonwebtoken to 12 and skip unsupported keys ([#36](https://github.com/chenhunghan/jwks/issues/36)) ([1820454](https://github.com/chenhunghan/jwks/commit/1820454edfe3db655d6674460f31e14f35a82267))
+
 ## [0.6.0](https://github.com/chenhunghan/jwks/compare/v0.5.3...v0.6.0) (2026-11-25)
 
 
