@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/chenhunghan/jwks/compare/v0.5.3...v0.6.0) (2026-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* public error/key types now come from jsonwebtoken 11.
+
+### Features
+
+* bump jsonwebtoken to 11 ([#32](https://github.com/chenhunghan/jwks/issues/32)) ([f90c287](https://github.com/chenhunghan/jwks/commit/f90c2870f7f1fa8edf5f7507d4509b1830ed8607))
+
 ## [0.5.3](https://github.com/chenhunghan/jwks/compare/v0.5.2...v0.5.3) (2026-02-23)
 
 
