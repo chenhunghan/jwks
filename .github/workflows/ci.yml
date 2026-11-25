@@ -20,12 +20,15 @@ jobs:
           - name: default
             toolchain: stable
             features: ""
-          - name: rust_crypto only
+          - name: rust_crypto without http
             toolchain: stable
             features: --no-default-features --features rust_crypto
-          - name: aws_lc_rs only
+          - name: aws_lc_rs without http
             toolchain: stable
             features: --no-default-features --features aws_lc_rs
+          - name: aws_lc_rs with http
+            toolchain: stable
+            features: --no-default-features --features aws_lc_rs,http
           - name: msrv
             toolchain: "1.88"
             features: ""
