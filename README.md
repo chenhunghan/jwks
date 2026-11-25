@@ -8,6 +8,25 @@ cargo add jwks
 
 <https://crates.io/crates/jwks>
 
+### jsonwebtoken compatibility
+
+`jwks` hands out [`jsonwebtoken`](https://github.com/Keats/jsonwebtoken) types (`DecodingKey`, `KeyAlgorithm`, errors), so your own `jsonwebtoken` dependency must be the same major version:
+
+| jwks  | jsonwebtoken | MSRV |
+|-------|--------------|------|
+| 0.7.x | 12           | 1.88 |
+| 0.6.x | 11           | 1.85 |
+
+### Crypto backend
+
+Enable exactly one backend. `rust_crypto` is the default; to use `aws_lc_rs`, turn the default off:
+
+```toml
+jwks = { version = "0.7", default-features = false, features = ["aws_lc_rs"] }
+```
+
+Enabling both makes `jsonwebtoken` panic at runtime when it picks a crypto provider.
+
 ## Usage
 
 ### Basic Usage
@@ -25,6 +44,25 @@ From a openid config url:
 let openid_config_url = "https://accounts.google.com/.well-known/openid-configuration";
 let jwks = Jwks::from_oidc_url(openid_config_url).await.unwrap();
 ```
+
+Each usable key is in `jwks.keys`, indexed by `kid`:
+
+```rust
+let jwk = jwks.keys.get(kid).expect("unknown kid");
+let token = jsonwebtoken::decode::<Claims>(token, &jwk.decoding_key, &validation)?;
+```
+
+### Unsupported keys
+
+Keys that can't be used to verify signatures are skipped instead of failing the whole set: an unknown `kty` or curve, an unsupported `alg`, `use` other than `sig`, or `key_ops` without `verify`. They are listed in `jwks.unsupported` with a reason:
+
+```rust
+for key in &jwks.unsupported {
+    eprintln!("skipped key {:?}: {}", key.kid, key.reason);
+}
+```
+
+Keys with invalid values (bad base64, empty HMAC secret) still fail with `JwksError::KeyError`. A set with no usable key, including an empty one, fails with `JwksError::NoUsableKeys`.
 
 ### JWT Validation
 
